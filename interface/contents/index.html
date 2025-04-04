@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Chained Modular AI Orchestrator</title>
+  <style>
+    /* Tab and general styling */
+    .tab {
+      overflow: hidden;
+      border-bottom: 1px solid #ccc;
+      margin-bottom: 20px;
+    }
+    .tab button {
+      background-color: inherit;
+      border: none;
+      outline: none;
+      cursor: pointer;
+      padding: 10px 20px;
+      float: left;
+      font-size: 16px;
+    }
+    .tab button.active {
+      background-color: #ddd;
+    }
+    .tabcontent {
+      display: none;
+      border: 1px solid #ccc;
+      padding: 20px;
+      min-height: 300px;
+    }
+    /* Parameter rows */
+    .param-row {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .param-row > div {
+      margin-right: 15px;
+    }
+    label { margin-right: 5px; }
+    textarea, select, input[type="number"] {
+      padding: 5px;
+      font-size: 14px;
+    }
+    .full-textarea {
+      width: 90%;
+      font-size: 16px;
+      resize: vertical;
+    }
+  </style>
+  <script>
+    // Hardcoded container mapping (update as needed)
+    const availableContainers = {
+      "input": "http://input:5000/v1/completions",
+      "reflection": "http://reflection:5000/v1/completions"
+    };
+
+    // On load, populate dropdowns
+    document.addEventListener('DOMContentLoaded', function() {
+      const inputDropdown = document.getElementById('inputContainer');
+      const reflectionDropdown = document.getElementById('reflectionContainer');
+      for (let key in availableContainers) {
+        let option = document.createElement('option');
+        option.value = key;
+        option.textContent = key;
+        inputDropdown.appendChild(option);
+
+        let option2 = document.createElement('option');
+        option2.value = key;
+        option2.textContent = key;
+        reflectionDropdown.appendChild(option2);
+      }
+      document.getElementById("defaultTab").click();
+    });
+
+    // Function to switch tabs.
+    function openTab(evt, tabName) {
+      var i, tabcontent, tablinks;
+      tabcontent = document.getElementsByClassName("tabcontent");
+      for (i = 0; i < tabcontent.length; i++) {
+        tabcontent[i].style.display = "none";
+      }
+      tablinks = document.getElementsByClassName("tablink");
+      for (i = 0; i < tablinks.length; i++) {
+        tablinks[i].className = tablinks[i].className.replace(" active", "");
+      }
+      document.getElementById(tabName).style.display = "block";
+      evt.currentTarget.className += " active";
+    }
+
+    // Function to clean formatting from text.
+    // It removes </think> markers, math formatting delimiters, bold markdown, and strips out the provided preface/suffix.
+    function parseIntermediateResponse(responseText, inputPreface, inputSuffix) {
+      let cleaned = responseText;
+      // Remove </think> markers.
+      cleaned = cleaned.replace(/<\/think>/g, '');
+      // Remove math-formatting contents: anything within \( ... \)
+      cleaned = cleaned.replace(/\\\([^\)]*\\\)/g, '');
+      // Remove markdown bold formatting: **...**
+      cleaned = cleaned.replace(/\*\*.*?\*\*/g, '');
+      // Remove the input preface if it appears at the beginning.
+      if(inputPreface) {
+        const prefaceRegex = new RegExp("^" + inputPreface.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
+        cleaned = cleaned.replace(prefaceRegex, '');
+      }
+      // Remove the input suffix if it appears at the end.
+      if(inputSuffix) {
+        const suffixRegex = new RegExp(inputSuffix.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&') + "$");
+        cleaned = cleaned.replace(suffixRegex, '');
+      }
+      return cleaned.trim();
+    }
+
+    async function sendChainedRequest() {
+      // --- Stage 1: Input Container ---
+      const mainPrompt = document.getElementById("main-prompt").value.trim();
+      if (!mainPrompt) {
+        alert("Please enter a question in the Main Prompt tab.");
+        return;
+      }
+      // Get Input Settings.
+      const inputContainer = document.getElementById("inputContainer").value;
+      const inputMaxTokens = document.getElementById("inputMaxTokens").value;
+      const inputTemperature = document.getElementById("inputTemperature").value;
+      const inputTopP = document.getElementById("inputTopP").value;
+      const inputPreface = document.getElementById("inputPreface").value;
+      const inputSuffix = document.getElementById("inputSuffix").value;
+
+      // Assemble full prompt for the input container.
+      const inputFullPrompt = inputPreface + " " + mainPrompt + " " + inputSuffix;
+      console.log("Payload for Input Container (" + inputContainer + "):", inputFullPrompt);
+
+      let rawInputResponse;
+      try {
+        const response1 = await fetch("/v1/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            container: inputContainer,
+            prompt: inputFullPrompt,
+            max_tokens: inputMaxTokens,
+            temperature: inputTemperature,
+            top_p: inputTopP
+          })
+        });
+        if (!response1.ok) {
+          throw new Error("Error from input container: " + response1.status);
+        }
+        const data1 = await response1.json();
+        rawInputResponse = data1.choices && data1.choices[0] ? data1.choices[0].prompt : "";
+        document.getElementById("intermediateResponse").value = rawInputResponse;
+      } catch (error) {
+        console.error("Input container error:", error);
+        document.getElementById("intermediateResponse").value = "Error retrieving response from input container.";
+        return;
+      }
+
+      // Clean up the intermediate response.
+      const parsedInputResponse = parseIntermediateResponse(rawInputResponse, inputPreface, inputSuffix);
+      console.log("Parsed Intermediate Response:", parsedInputResponse);
+
+      // Combine the original question and the cleaned answer.
+      const combinedQA = "Question: " + mainPrompt + "\nAnswer: " + parsedInputResponse;
+
+      // --- Stage 2: Reflection Container ---
+      const reflectionContainer = document.getElementById("reflectionContainer").value;
+      const reflectionMaxTokens = document.getElementById("reflectionMaxTokens").value;
+      const reflectionTemperature = document.getElementById("reflectionTemperature").value;
+      const reflectionTopP = document.getElementById("reflectionTopP").value;
+      const reflectionPreface = document.getElementById("reflectionPreface").value;
+      const reflectionSuffix = document.getElementById("reflectionSuffix").value;
+
+      // Build the prompt for the reflection container by including the combined question and answer.
+      const reflectionFullPrompt = reflectionPreface + " " + combinedQA + " " + reflectionSuffix;
+      console.log("Payload for Reflection Container (" + reflectionContainer + "):", reflectionFullPrompt);
+
+      try {
+        const response2 = await fetch("/v1/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            container: reflectionContainer,
+            prompt: reflectionFullPrompt,
+            max_tokens: reflectionMaxTokens,
+            temperature: reflectionTemperature,
+            top_p: reflectionTopP
+          })
+        });
+        if (!response2.ok) {
+          throw new Error("Error from reflection container: " + response2.status);
+        }
+        const data2 = await response2.json();
+        const finalResponse = data2.choices && data2.choices[0] ? data2.choices[0].prompt : "";
+        document.getElementById("finalResponse").value = finalResponse;
+      } catch (error) {
+        console.error("Reflection container error:", error);
+        document.getElementById("finalResponse").value = "Error retrieving response from reflection container.";
+      }
+    }
+  </script>
+</head>
+<body>
+  <h1>Chained Modular AI Orchestrator</h1>
+  <!-- Tab Navigation -->
+  <div class="tab">
+    <button class="tablink" onclick="openTab(event, 'mainTab')" id="defaultTab">Main Prompt</button>
+    <button class="tablink" onclick="openTab(event, 'inputSettings')">Input Settings</button>
+    <button class="tablink" onclick="openTab(event, 'reflectionSettings')">Reflection Settings</button>
+  </div>
+
+  <!-- Main Prompt Tab -->
+  <div id="mainTab" class="tabcontent">
+    <h2>Main Prompt</h2>
+    <div class="param-row">
+      <div>
+        <label for="main-prompt">Your Question:</label><br>
+        <textarea id="main-prompt" class="full-textarea" rows="4" placeholder="Type your question here..."></textarea>
+      </div>
+    </div>
+    <button onclick="sendChainedRequest()">Send Chained Request</button>
+    <h3>Intermediate (Input Container) Response:</h3>
+    <textarea id="intermediateResponse" class="full-textarea" rows="6" readonly></textarea>
+    <h3>Final (Reflection Container) Response:</h3>
+    <textarea id="finalResponse" class="full-textarea" rows="6" readonly></textarea>
+  </div>
+
+  <!-- Input Settings Tab -->
+  <div id="inputSettings" class="tabcontent">
+    <h2>Input Container Settings</h2>
+    <div class="param-row">
+      <div>
+        <label for="inputContainer">Container:</label>
+        <select id="inputContainer"></select>
+      </div>
+      <div>
+        <label for="inputMaxTokens">Max Tokens:</label>
+        <input id="inputMaxTokens" type="number" value="500" style="width:80px;">
+      </div>
+      <div>
+        <label for="inputTemperature">Temperature:</label>
+        <input id="inputTemperature" type="number" step="0.1" value="0.7" style="width:80px;">
+      </div>
+      <div>
+        <label for="inputTopP">Top P:</label>
+        <input id="inputTopP" type="number" step="0.1" value="0.9" style="width:80px;">
+      </div>
+    </div>
+    <div class="param-row">
+      <div>
+        <label for="inputPreface">Preface:</label><br>
+        <textarea id="inputPreface" class="full-textarea" rows="3" placeholder="Enter text to prepend">You are a helpful assistant. Answer the user as succinctly as possible. Do not repeat the question. Only provide the answer below, with no additional commentary or formatting. Do not generate anything additional after "Answer:", besides the response. Question:</textarea>
+      </div>
+      <div>
+        <label for="inputSuffix">Suffix:</label><br>
+        <textarea id="inputSuffix" class="full-textarea" rows="3" placeholder="Enter text to append">Answer:</textarea>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reflection Settings Tab -->
+  <div id="reflectionSettings" class="tabcontent">
+    <h2>Reflection Container Settings</h2>
+    <div class="param-row">
+      <div>
+        <label for="reflectionContainer">Container:</label>
+        <select id="reflectionContainer"></select>
+      </div>
+      <div>
+        <label for="reflectionMaxTokens">Max Tokens:</label>
+        <input id="reflectionMaxTokens" type="number" value="500" style="width:80px;">
+      </div>
+      <div>
+        <label for="reflectionTemperature">Temperature:</label>
+        <input id="reflectionTemperature" type="number" step="0.1" value="0.7" style="width:80px;">
+      </div>
+      <div>
+        <label for="reflectionTopP">Top P:</label>
+        <input id="reflectionTopP" type="number" step="0.1" value="0.9" style="width:80px;">
+      </div>
+    </div>
+    <div class="param-row">
+      <div>
+        <label for="reflectionPreface">Preface:</label><br>
+        <textarea id="reflectionPreface" class="full-textarea" rows="3" placeholder="Enter text to prepend">You are an anlysis model. Your job is to not further generate the question, but provide insight into whether or not the answer succinctly and accurately answers the question. Simply analyze the question and answer, and decide if it makes sense.</textarea>
+      </div>
+      <div>
+        <label for="reflectionSuffix">Suffix:</label><br>
+        <textarea id="reflectionSuffix" class="full-textarea" rows="3" placeholder="Enter text to append">Response:</textarea>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

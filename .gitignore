@@ -1,0 +1,6 @@
+components/backup/*
+components/input/contents/*
+components/reflection/contents/*
+
+!components/input/contents/model.py
+!components/reflection/contents/model.py

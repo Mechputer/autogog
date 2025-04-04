@@ -1,0 +1,53 @@
+version: "3.8"
+services:
+  # Front-end service
+  frontend:
+    build:
+      context: ./interface  # Points to the interface folder
+      dockerfile: Dockerfile
+#    deploy:
+#      resources:
+#        limits:
+#          memory: 1g
+#          cpus: "2.0"
+    ports:
+      - "5000:5000"          # Exposes the front-end on port 5000
+    depends_on:
+      - input
+      - reflection
+      - emotional
+    networks:
+      - backend_network
+
+  # Input container
+  input:
+    build:
+      context: ./components/input       # Path to the input module (Dockerfile is here)
+      dockerfile: Dockerfile
+#    deploy:
+#      resources:
+#        limits:
+#          memory: 8g
+#          cpus: "8.0"
+    networks:
+      - backend_network
+
+  # Placeholder for reflection module
+  reflection:
+    build:
+      context: ./components/reflection  # Path to the reflection module (Dockerfile is here)
+      dockerfile: Dockerfile
+    networks:
+      - backend_network
+
+  # Placeholder for Emotional module
+  emotional:
+    build:
+      context: ./components/emotional   # Path to the emotional module (Dockerfile is here)
+      dockerfile: Dockerfile
+    networks:
+      - backend_network
+
+networks:
+  backend_network:
+    driver: bridge

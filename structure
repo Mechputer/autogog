@@ -1,0 +1,10 @@
+User input -> Modified in front-end to ask input
+Input analyzer -> Responds with weights of relevancy per module to be activated
+Parse and send -> front-end extracts relevant modules, and sends question to them
+Submodules -> Respond with their specific take on the question
+Summarize -> Summarizer takes input from submodules and summarizes for human consumption
+Output -> Summarizer offers response in front-end
+Request feedback -> Await positive or negative feedback
+Metacognition -> Feedback modified based on weight for submodules
+Learning -> weight modified feedback sent to submodules
+Improvment -> submodule feedback modifies parameters

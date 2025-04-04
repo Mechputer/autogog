@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Modular AI Orchestrator</title>
+    <script>
+        async function sendRequest() {
+            const container = document.getElementById("container").value;
+            const prompt = document.getElementById("prompt").value.trim();
+            const maxTokens = document.getElementById("maxTokens").value;
+            const temperature = document.getElementById("temperature").value;
+            const topP = document.getElementById("topP").value;
+
+            console.log("Payload being sent:", {
+                container,
+                prompt,
+                max_tokens: maxTokens,
+                temperature,
+                top_p: topP
+            });
+
+            try {
+                const response = await fetch("/v1/completions", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        container: container,
+                        prompt: prompt,
+                        max_tokens: maxTokens,
+                        temperature: temperature,
+                        top_p: topP
+                    })
+                });
+
+                console.log("Response received:", response);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                console.log("Parsed response data:", data);
+
+                // Extract the generated text from the nested structure.
+                const generatedText = data.choices && data.choices.length > 0 && data.choices[0].prompt 
+                    ? data.choices[0].prompt 
+                    : "No response generated.";
+                document.getElementById("response").textContent = generatedText;
+
+            } catch (error) {
+                console.error("Error occurred:", error);
+                document.getElementById("response").textContent = "An error occurred. Check the console for details.";
+            }
+        }
+    </script>
+</head>
+<body>
+    <h1>Modular AI Orchestrator</h1>
+
+    <label for="container">Select Container:</label>
+    <select id="container">
+        <option value="input">Input Analyzer</option>
+        <option value="emotional">Emotional Processor</option>
+        <option value="ethics">Ethics Module</option>
+    </select><br><br>
+
+    <label for="prompt">Prompt:</label>
+    <input id="prompt" type="text" value="Hello."><br><br>
+
+    <label for="maxTokens">Max Tokens:</label>
+    <input id="maxTokens" type="number" value="150"><br><br>
+
+    <label for="temperature">Temperature:</label>
+    <input id="temperature" type="number" step="0.1" value="0.7"><br><br>
+
+    <label for="topP">Top P:</label>
+    <input id="topP" type="number" step="0.1" value="0.9"><br><br>
+
+    <button onclick="sendRequest()">Send</button>
+    <h2>Response:</h2>
+    <pre id="response"></pre>
+</body>
+</html>

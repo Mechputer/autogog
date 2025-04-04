@@ -1,0 +1,16 @@
+sudo apt update
+
+sudo apt install docker.io -y
+sudo systemctl start docker
+sudo systemctl enable docker
+sudo usermod -aG docker $USER
+newgrp docker
+docker ps
+docker --version
+
+sudo apt install python3-pip
+pip3 install transformers numpy torch
+pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu126
+pip3 install hf_xet
+
+sudo apt install curl
